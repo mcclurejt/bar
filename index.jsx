@@ -1,28 +1,34 @@
 // Update every second for the clock. Expensive elements should
 // throttle themselves
-export const refreshFrequency = 5000 // ms
+export const refreshFrequency = 5000; // ms
 
-import { theme } from './lib/style.js';
+import { theme } from "./lib/style.js";
 import {
   Battery,
   Cpu,
   Time,
   Workspaces,
-  Playing
-} from './elements/index.jsx'
+  Playing,
+  CurrentWindows
+} from "./elements/index.jsx";
 
 const config = {
   time: {
     format: "%l:%M",
     style: {
-      padding: '0 15px',
-      backgroundColor: theme.backgroundLight,
+      padding: "0 15px",
+      backgroundColor: theme.backgroundLight
     }
   },
   battery: {
     style: {}
   },
   workspaces: {
+    style: {
+      backgroundColor: theme.backgroundLight
+    }
+  },
+  windows: {
     style: {}
   },
   cpu: {
@@ -31,67 +37,101 @@ const config = {
   playing: {
     style: {}
   }
-}
+};
 
 const barStyle = {
   top: 0,
   right: 0,
   left: 0,
-  position: 'fixed',
+  position: "fixed",
   background: theme.background,
-  overflow: 'hidden',
+  overflow: "hidden",
   color: theme.text,
-  height: '25px',
-  fontFamily: 'Helvetica',
-  fontSize: '.9rem',
-  boxShadow: '0px 2px 5px 0 #000000',
-}
-
+  height: "25px",
+  fontFamily: "Helvetica",
+  fontSize: ".9rem",
+  boxShadow: "0px 2px 5px 0 #000000"
+};
 
 const result = (data, key) => {
   try {
-    return JSON.parse(data)[key]
+    return JSON.parse(data)[key];
   } catch (e) {
-    return ''
+    return "";
   }
-}
+};
 
 // export const command = 'sh bar/scripts/update'
 export const command = `
 BAT=$(pmset -g batt | egrep '([0-9]+\%).*' -o --colour=auto | cut -f1 -d';');
-SPACE=$(if command -v /usr/local/bin/chunkc >/dev/null 2>&1; then echo $(/usr/local/bin/chunkc tiling::query -d id); else echo ""; fi)
-SPOTIFY=$(osascript -e 'tell application "System Events"set processList to (name of every process)end tellif (processList contains "Spotify") is true thentell application "Spotify"if player state is playing thenset artistName to artist of current trackset trackName to name of current trackreturn artistName & " - " & trackNameelsereturn ""end ifend tellend if')
 
+SPACE=$(if command -v /usr/local/bin/chunkc >/dev/null 2>&1; then echo $(/usr/local/bin/chunkc tiling::query -d id); else echo ""; fi);
+
+SPOTIFY=$(osascript -e 'tell application "System Events"
+set processList to (name of every process)
+end tell
+if (processList contains "Spotify") is true then
+tell application "Spotify"
+if player state is playing then
+set artistName to artist of current track
+set trackName to name of current track
+return artistName & " - " & trackName
+else
+return ""
+end if
+end tell
+end if');
+
+WINDOWDETAILS=$(if command -v /usr/local/bin/chunkc >/dev/null 2>&1; then echo $(/usr/local/bin/chunkc tiling::query -d windows | tr '"' "'" | tr "\n" ", "); else echo ""; fi);
 
 echo $(cat <<-EOF
   {
     "battery": "$BAT",
     "workspace": "$SPACE",
-    "playing": "$SPOTIFY"
+    "playing": "$SPOTIFY",
+    "windowdetails": "$WINDOWDETAILS"
   }
 EOF
 );
-`
+`;
 
 export const render = ({ output, error }) => {
-  if(error) {
-    console.log(new Date())
-    console.log(error)
-    console.log(String(error))
+  if (error) {
+    console.log(new Date());
+    console.log(error);
+    console.log(String(error));
   }
-  let errorContent = (
-    <div style={barStyle}></div>
-  )
+  let windowDetails = result(output, "windowdetails")
+    .split(",")
+    .map(str => str.trim());
+  let windowList = [];
+  for (let i = 0; i < windowDetails.length; i = i + 3) {
+    if (windowDetails[i + 2] !== "(invalid)" && windowDetails[i] !== "")
+      windowList.push(windowDetails[i + 1]);
+  }
+  let errorContent = <div style={barStyle} />;
   let content = (
     <div style={barStyle}>
-      <link rel="stylesheet" type="text/css" href="bar/assets/font-awesome/css/all.min.css" />
-      <Workspaces config={config.workspaces} data={result(output, "workspace")} side="left" />
-
+      <link
+        rel="stylesheet"
+        type="text/css"
+        href="bar/assets/font-awesome/css/all.min.css"
+      />
+      <Workspaces
+        config={config.workspaces}
+        data={result(output, "workspace")}
+        side="left"
+      />
+      <CurrentWindows config={config.windows} data={windowList} side="left" />
       <Playing config={config.playing} data={result(output, "playing")} />
 
-      <Time config={config.time} side="right"></Time>
-      <Battery config={config.battery} data={result(output, "battery")} side="right" />
+      <Time config={config.time} side="right" />
+      <Battery
+        config={config.battery}
+        data={result(output, "battery")}
+        side="right"
+      />
     </div>
-  )
-  return error ? errorContent : content
-}
+  );
+  return error ? errorContent : content;
+};
